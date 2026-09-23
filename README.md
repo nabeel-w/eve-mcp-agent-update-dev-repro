@@ -6,6 +6,14 @@ whenever the agent runs on the local development host (`eve dev`, or the
 local target `eve eval` starts). The same agent works after `eve build` +
 `eve start`.
 
+> **Platform: reproduces on Windows only.** On Linux (`node:24-bookworm`,
+> Node 24.21.0, pnpm 11.1.2) the same commit passes. The dev-host process
+> loads `channel/channel-operations.js` twice on both platforms; on Windows the
+> host builds its channel handle from the copy inlined into the dev bundle,
+> while `workflow-execution.js` uses the `node_modules` copy, so the
+> `INTERNAL_CHANNEL_DELIVER` Symbols differ. Runtime trace:
+> https://github.com/vercel/eve/issues/3673
+
 Created with `pnpm dlx eve@0.64.1 init --non-interactive`. The only changes on
 top of the scaffold:
 
