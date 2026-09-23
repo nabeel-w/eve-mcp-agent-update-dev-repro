@@ -1,35 +1,47 @@
-# eve-mcp-agent-update-dev-repro
+# Repro: MCP `agent_update` fails under the eve dev host
 
-This is an [eve](https://eve.dev) agent bootstrapped with [`eve init`](https://eve.dev/docs/reference/cli#eve-init).
+`agent_update` on the MCP channel throws
+`TypeError: this[#t](...)[INTERNAL_CHANNEL_DELIVER] is not a function`
+whenever the agent runs on the local development host (`eve dev`, or the
+local target `eve eval` starts). The same agent works after `eve build` +
+`eve start`.
 
-## Getting started
+Created with `pnpm dlx eve@0.64.1 init --non-interactive`. The only changes on
+top of the scaffold:
 
-First, run the development server:
+| File | Why |
+| --- | --- |
+| `agent/agent.ts` | `mockModel` that calls one tool, then answers — no provider credentials needed |
+| `agent/tools/write_thing.ts` | a tool with `approval: always()`, so the invocation reaches `input_required` |
+| `agent/channels/mcp.ts` | `mcpChannel({ auth: localDev() })` |
+| `evals/mcp-agent-update.eval.ts` | drives `agent_start` → `agent_get` → `agent_update` over `/eve/v1/mcp` |
 
-```bash
-eve dev
+## Reproduce
+
+```sh
+pnpm install
+pnpm exec eve eval --verbose
 ```
 
-The development TUI opens an interactive session where you can send messages to your agent.
+Expected: `agent_update` accepts the approval and returns the invocation
+state (`status: "working"`), and the eval passes.
 
-Start by editing `agent/instructions.md` to define the agent's identity, purpose, tone, and response guidelines. Configure its model and runtime behavior in `agent/agent.ts`.
+Actual: `agent_update` returns `isError: true` with
+`{"code":"internal", ...}`, and the server logs
+`TypeError: this[#t](...)[INTERNAL_CHANNEL_DELIVER] is not a function`
+(full output in the issue). The eval fails on `agent_update accepted`.
 
-Add capabilities under `agent/`, including tools, connections, channels, skills, subagents, and schedules. eve reloads your changes as you work.
+## It works in production
 
-## Learn more
+Switch the channel to `none()` (`localDev()` refuses production), then:
 
-To learn more about eve, explore these resources:
-
-- [eve documentation](https://eve.dev/docs) — learn about eve's features and authoring APIs.
-- [Build an Agent tutorial](https://eve.dev/docs/tutorial/first-agent) — build and deploy an agent step by step.
-- [eve on GitHub](https://github.com/vercel/eve) — view the source and contribute.
-
-## Deploy on Vercel
-
-Deploy your agent to [Vercel](https://vercel.com) from the project root:
-
-```bash
-eve deploy
+```sh
+pnpm exec eve build --skip-sandbox-prewarm
+pnpm exec eve start --port 3998
 ```
 
-`eve deploy` links a Vercel project if needed and deploys the agent to production. See the [eve deployment documentation](https://eve.dev/docs/guides/deployment/vercel) for authentication, environment variables, and deployment options.
+Driving the same three calls against `http://127.0.0.1:3998/eve/v1/mcp` gives
+`input_required` → `agent_update` → `working` → `completed` with
+`done: {"wrote":"x"}`.
+
+The original scaffold README is in `README.eve-init.md`.
